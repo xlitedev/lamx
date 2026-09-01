@@ -1,55 +1,59 @@
 {
-  "name": "xlited/lamx",
-  "description": "Build Laravel apps with </> htmx",
-  "keywords": [
-    "xlited",
-    "lamx",
-    "laravel",
-    "htmx"
-  ],
-  "homepage": "https://github.com/xlited/lamx",
-  "license": "MIT",
-  "type": "library",
-  "authors": [
-    {
-      "name": "Ion Caliman",
-      "email": "xlite.dev@gmail.com",
-      "role": "Developer"
+    "name": "xlited/lamx",
+    "description": "Build Laravel apps with </> htmx",
+    "keywords": [
+        "xlited",
+        "lamx",
+        "laravel",
+        "htmx"
+    ],
+    "homepage": "https://github.com/xlited/lamx",
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Ion Caliman",
+            "email": "xlite.dev@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/view": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/routing": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/http": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/validation": "^10.0|^11.0|^12.0|^13.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^8.0|^9.0|^10.0|^11.0",
+        "phpunit/phpunit": "^10.5|^11.5|^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Xlited\\Lamx\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Xlited\\Lamx\\Tests\\": "tests"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Xlited\\Lamx\\LamxServiceProvider"
+            ],
+            "aliases": {
+                "Lamx": "Xlited\\Lamx\\LamxFacade"
+            }
+        }
     }
-  ],
-  "require": {
-    "php": "^8.1",
-    "illuminate/support": "^11.0|^10.0"
-  },
-  "require-dev": {
-    "orchestra/testbench": "^9.0|^8.0",
-    "phpunit/phpunit": "^11.0"
-  },
-  "autoload": {
-    "psr-4": {
-      "Xlited\\Lamx\\": "src"
-    }
-  },
-  "autoload-dev": {
-    "psr-4": {
-      "Xlited\\Lamx\\Tests\\": "tests"
-    }
-  },
-  "scripts": {
-    "test": "vendor/bin/phpunit",
-    "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
-  },
-  "config": {
-    "sort-packages": true
-  },
-  "extra": {
-    "laravel": {
-      "providers": [
-        "Xlited\\Lamx\\LamxServiceProvider"
-      ],
-      "aliases": {
-        "Lamx": "Xlited\\Lamx\\LamxFacade"
-      }
-    }
-  }
 }

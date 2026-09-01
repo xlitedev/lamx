@@ -8,28 +8,36 @@ class BladeDirectives
 {
     public static function register(): void
     {
-        Blade::directive('lamxScripts', function ($expression) {
-            return <<<HTML
+        /*
+         * Wires htmx (v4) to Laravel: sends the CSRF token with every request
+         * and shows server errors (5xx) in the modal rendered by @lamxTemplates
+         * instead of swapping the error page into the target.
+         */
+        Blade::directive('lamxScripts', function () {
+            return <<<'HTML'
             <script>
-                document.body.addEventListener('htmx:configRequest', function(evt) {
-                    // Add csrf token to all htmx requests
-                    evt.detail.headers['X-CSRF-TOKEN'] = document.head.querySelector('meta[name="csrf-token"]').content;
-                });
-                document.body.addEventListener('htmx:beforeSwap', function(evt) {
-                    if (evt.detail.xhr.status === 500) {
-                        evt.detail.shouldSwap = true;
-                        evt.detail.etc.swapOverride = 'innerHTML';
-                        evt.detail.target = htmx.find("#lamxErrorModal .modal-box");
-
-                        htmx.find("#lamxErrorModal").showModal();
+                document.addEventListener('htmx:config:request', function (evt) {
+                    var token = document.head.querySelector('meta[name="csrf-token"]');
+                    if (token) {
+                        evt.detail.ctx.request.headers['X-CSRF-TOKEN'] = token.content;
                     }
+                });
+                document.addEventListener('htmx:before:swap', function (evt) {
+                    var ctx = evt.detail.ctx;
+                    var modal = document.getElementById('lamxErrorModal');
+                    if (!modal || !ctx.response || ctx.response.status < 500) {
+                        return;
+                    }
+                    evt.preventDefault();
+                    modal.querySelector('.modal-box').innerHTML = ctx.text;
+                    modal.showModal();
                 });
             </script>
             HTML;
         });
 
-        Blade::directive('lamxTemplates', function ($expression) {
-            return <<<HTML
+        Blade::directive('lamxTemplates', function () {
+            return <<<'HTML'
             <dialog id="lamxErrorModal" class="modal">
                 <div class="modal-box w-11/12 max-w-5xl min-h-[50vh]"></div>
                 <form method="dialog" class="modal-backdrop">

@@ -2,63 +2,86 @@
 
 namespace Xlited\Lamx;
 
-use Illuminate\Support\Facades\Blade;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\View\Engines\EngineResolver;
+use Xlited\Lamx\Http\Controllers\ActionController;
 use Xlited\Lamx\Providers\BladeDirectives;
+use Xlited\Lamx\View\LamxCompilerEngine;
 
 class LamxServiceProvider extends ServiceProvider
 {
-    /**
-     * Bootstrap the application services.
-     */
-    public function boot()
+    public function register(): void
     {
-        /*
-         * Optional methods to load your package assets
-         */
-        // $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'lamx');
-        // $this->loadViewsFrom(__DIR__ . '/../resources/views', 'lamx');
-        // $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-        // $this->loadRoutesFrom(__DIR__.'/routes.php');
+        $this->mergeConfigFrom(__DIR__.'/../config/config.php', 'lamx');
 
+        $this->app->singleton('lamx', fn ($app) => new Lamx($app));
+        $this->app->alias('lamx', Lamx::class);
+    }
+
+    public function boot(): void
+    {
         BladeDirectives::register();
+
+        $this->registerBladeEngine();
+        $this->registerRequestMacros();
+        $this->registerRoutes();
 
         if ($this->app->runningInConsole()) {
             $this->publishes([
-                __DIR__ . '/../config/config.php' => config_path('lamx.php'),
-            ], 'config');
-
-            // Publishing the views.
-            /*$this->publishes([
-                __DIR__.'/../resources/views' => resource_path('views/vendor/lamx'),
-            ], 'views');*/
-
-            // Publishing assets.
-            /*$this->publishes([
-                __DIR__.'/../resources/assets' => public_path('vendor/lamx'),
-            ], 'assets');*/
-
-            // Publishing the translation files.
-            /*$this->publishes([
-                __DIR__.'/../resources/lang' => resource_path('lang/vendor/lamx'),
-            ], 'lang');*/
-
-            // Registering package commands.
-            // $this->commands([]);
+                __DIR__.'/../config/config.php' => config_path('lamx.php'),
+            ], 'lamx-config');
         }
     }
 
     /**
-     * Register the application services.
+     * Swap the Blade engine for one that binds $this to the rendering component.
      */
-    public function register()
+    protected function registerBladeEngine(): void
     {
-        // Automatically apply the package configuration
-        $this->mergeConfigFrom(__DIR__ . '/../config/config.php', 'lamx');
+        /** @var EngineResolver $resolver */
+        $resolver = $this->app->make('view.engine.resolver');
 
-        // Register the main class to use with the facade
-        $this->app->singleton('lamx', function () {
-            return new Lamx;
+        $resolver->register('blade', function () {
+            $engine = new LamxCompilerEngine($this->app['blade.compiler'], $this->app['files']);
+
+            $this->app->terminating(static function () use ($engine) {
+                $engine->forgetCompiledOrNotExpired();
+            });
+
+            return $engine;
+        });
+    }
+
+    protected function registerRequestMacros(): void
+    {
+        Request::macro('isHtmx', function () {
+            /** @var Request $this */
+            return $this->headers->has('HX-Request');
+        });
+
+        Request::macro('isHtmxBoosted', function () {
+            /** @var Request $this */
+            return $this->headers->has('HX-Boosted');
+        });
+    }
+
+    protected function registerRoutes(): void
+    {
+        if (method_exists($this->app, 'routesAreCached') && $this->app->routesAreCached()) {
+            return;
+        }
+
+        $config = $this->app['config']->get('lamx.route', []);
+
+        Route::group([
+            'prefix' => $config['prefix'] ?? 'lamx',
+            'middleware' => $config['middleware'] ?? ['web'],
+        ], function () use ($config) {
+            Route::any('{component}/{action}', ActionController::class)
+                ->where(['component' => '[A-Za-z0-9_.:-]+', 'action' => '[A-Za-z_][A-Za-z0-9_]*'])
+                ->name($config['name'] ?? 'lamx.action');
         });
     }
 }
