@@ -80,7 +80,7 @@ class LamxServiceProvider extends ServiceProvider
             'middleware' => $config['middleware'] ?? ['web'],
         ], function () use ($config) {
             Route::any('{component}/{action}', ActionController::class)
-                ->where(['component' => '[A-Za-z0-9_.:-]+', 'action' => '[A-Za-z_][A-Za-z0-9_]*'])
+                ->where(['component' => '[A-Za-z0-9_.:-]+', 'action' => '\\$?[A-Za-z_][A-Za-z0-9_]*'])
                 ->name($config['name'] ?? 'lamx.action');
         });
     }

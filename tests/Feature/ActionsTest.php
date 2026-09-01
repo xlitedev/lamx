@@ -109,10 +109,9 @@ class ActionsTest extends TestCase
     {
         $snapshot = Counter::make(['count' => 1])->snapshot();
 
-        [$data, $signature] = explode('.', $snapshot);
-        $forged = rtrim(strtr(base64_encode(json_encode(['class' => Counter::class, 'props' => ['count' => 999]])), '+/', '-_'), '=');
+        $tampered = substr_replace($snapshot, $snapshot[20] === 'A' ? 'B' : 'A', 20, 1);
 
-        $this->callAction('counter', 'increment', null, [HtmxComponent::STATE_KEY => $forged.'.'.$signature])->assertStatus(400);
+        $this->callAction('counter', 'increment', null, [HtmxComponent::STATE_KEY => $tampered])->assertStatus(400);
         $this->callAction('counter', 'increment', null, [HtmxComponent::STATE_KEY => 'garbage'])->assertStatus(400);
         $this->callAction('greeting', 'increment', null, [HtmxComponent::STATE_KEY => $snapshot])->assertStatus(400);
     }

@@ -9,6 +9,7 @@ use Xlited\Lamx\LamxServiceProvider;
 use Xlited\Lamx\Tests\Fixtures\Components\Counter;
 use Xlited\Lamx\Tests\Fixtures\Components\Greeting;
 use Xlited\Lamx\Tests\Fixtures\Components\Page;
+use Xlited\Lamx\Tests\Fixtures\Components\Search;
 use Xlited\Lamx\Tests\Fixtures\Components\TodoForm;
 
 abstract class TestCase extends Orchestra
@@ -32,6 +33,7 @@ abstract class TestCase extends Orchestra
         Blade::component('counter', Counter::class);
         Blade::component('greeting', Greeting::class);
         Blade::component('page', Page::class);
+        Blade::component('search', Search::class);
         Blade::component('todo-form', TodoForm::class);
         Blade::componentNamespace('Xlited\\Lamx\\Tests\\Fixtures\\Components', 'lamx-test');
 

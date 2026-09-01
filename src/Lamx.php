@@ -111,10 +111,13 @@ class Lamx
      */
     public function actionUrl(string $class, string $action, array $parameters = []): string
     {
-        return $this->app->make('url')->route(
+        $url = $this->app->make('url')->route(
             $this->app['config']->get('lamx.route.name', 'lamx.action'),
             ['component' => $this->componentName($class), 'action' => $action] + $parameters
         );
+
+        // "$" is a legal path character; keep the built-in "$refresh" readable.
+        return str_replace('/%24', '/$', $url);
     }
 
     /**

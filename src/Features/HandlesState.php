@@ -2,6 +2,7 @@
 
 namespace Xlited\Lamx\Features;
 
+use Illuminate\Container\Container;
 use ReflectionProperty;
 use Xlited\Lamx\Exceptions\InvalidSnapshotException;
 use Xlited\Lamx\Exceptions\UnserializableValueException;
@@ -9,14 +10,15 @@ use Xlited\Lamx\Support\Snapshot;
 
 /**
  * The public properties of a component are its state. When the component is
- * rendered, a signed snapshot of them is attached to the root element as
+ * rendered, an encrypted snapshot of them is attached to the root element as
  * hx-vals:inherited, so every htmx request made from inside the component
  * sends it back and the very same component can be re-created on the
  * server before the action runs.
  *
  * Supported values: scalars, arrays, enums, dates, collections and Eloquent
  * models (stored by key and re-fetched). Anything else is left out and
- * re-created by the constructor.
+ * re-created by the constructor; when the constructor does not know the
+ * property, a warning is logged, because its value will be lost.
  */
 trait HandlesState
 {
@@ -69,7 +71,7 @@ trait HandlesState
     }
 
     /**
-     * The signed snapshot of the component state.
+     * The encrypted snapshot of the component state.
      */
     public function snapshot(): string
     {
@@ -107,6 +109,7 @@ trait HandlesState
     protected function stateProperties(): array
     {
         $props = [];
+        $constructorParameters = static::extractConstructorParameters();
 
         foreach ($this->extractPublicProperties() as $name => $value) {
             if (in_array($name, ['attributes', 'componentName'], true)) {
@@ -115,11 +118,26 @@ trait HandlesState
 
             try {
                 $props[$name] = Snapshot::dehydrate($value);
-            } catch (UnserializableValueException) {
-                // Left out; the constructor re-creates it.
+            } catch (UnserializableValueException $e) {
+                // Constructor parameters are re-created; anything else is lost.
+                if (! in_array($name, $constructorParameters, true)) {
+                    $this->warnAboutDroppedProperty($name, $e);
+                }
             }
         }
 
         return $props;
+    }
+
+    protected function warnAboutDroppedProperty(string $name, UnserializableValueException $e): void
+    {
+        $app = Container::getInstance();
+
+        if ($app->bound('log')) {
+            $app->make('log')->warning(sprintf(
+                'Lamx left [%s::$%s] out of the component state, so it will not survive the next request: %s',
+                static::class, $name, $e->getMessage()
+            ));
+        }
     }
 }

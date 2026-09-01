@@ -7,7 +7,7 @@
 **Lamx** brings Livewire-style components to [htmx](https://htmx.org). A component is a single PHP
 class that holds its **state** (public properties), its **actions** (public methods) and its
 **validation** rules, plus a Blade view in which `$this` is available. htmx does the transport:
-every request made from inside a component carries a signed snapshot of its state, the action
+every request made from inside a component carries an encrypted snapshot of its state, the action
 runs against the re-hydrated component and the returned HTML is swapped into the page.
 
 Requires PHP 8.1+, Laravel 10–13 and htmx 4.
@@ -73,16 +73,69 @@ Use it like any Blade component (`<x-todo :id="1" title="Milk" />`), build it in
 
 ### State
 
-The public properties are the state. When the component renders, a signed snapshot of them is
-attached to the root element as `hx-vals:inherited`, so htmx sends it with every request made
+The public properties are the state. When the component renders, an encrypted snapshot of them
+is attached to the root element as `hx-vals:inherited`, so htmx sends it with every request made
 from inside the component and the action runs on an identical instance. Scalars, arrays, enums,
 dates, collections and Eloquent models (stored by key, re-fetched on the next request) are
-supported; anything else is left out and re-created by the constructor.
+supported; anything else is left out and re-created by the constructor — and logged as a
+warning when the constructor does not know the property, because its value is lost.
 
 - Set `protected bool $stateless = true;` to skip the snapshot.
 - If an element inside the component needs its own `hx-vals`, use `hx-vals:append` so the
   component state is kept (htmx 4 replaces the whole value otherwise).
-- The snapshot is signed with `APP_KEY`; tampering yields a `400`.
+- The snapshot is encrypted with `APP_KEY` (Laravel's `Crypt`), which also authenticates it:
+  tampering yields a `400`.
+
+### Binding with Alpine.js
+
+Mark a property `#[Bindable]` and it is shared with [Alpine.js](https://alpinejs.dev): the
+component renders it into the root element's `x-data`, so the view can use `x-model`, `x-text`,
+`x-show`... and the page reacts instantly. Every htmx request made from inside the component
+sends the current values back (`@lamxScripts` takes care of it), where they are coerced to the
+property type and applied before the action runs. The server catches up on the next action,
+and its response is the truth again.
+
+```php
+use Xlited\Lamx\Attributes\Bindable;
+
+class Search extends HtmxComponent
+{
+    #[Bindable]
+    public string $query = '';
+
+    #[Bindable]
+    public ?int $page = null;
+
+    protected function updatedQuery(string $value, string $old): void
+    {
+        $this->page = null; // back to the first page when the query changes
+    }
+}
+```
+
+```blade
+<div id="search" hx-target="#search" hx-swap="outerHTML">
+    <input x-model="query" hx-post="{{ $this->action('$refresh') }}" hx-trigger="input changed delay:300ms">
+    <span x-show="query.length > 2">Searching for <span x-text="query"></span>…</span>
+</div>
+```
+
+- Load Alpine yourself (Vite or the CDN); `@lamxScripts` only checks for `window.Alpine`.
+- Bindable properties are `int`, `float`, `string`, `bool` (nullable or not) and flat arrays of
+  scalars. Nothing else is bindable, and a property without `#[Bindable]` can never be changed
+  by the browser — the snapshot stays the trusted baseline.
+- Values are coerced to the declared type (`"5"` → `5`, `""` → `null` for nullable properties).
+  An uncoercible value is a `400`; unknown keys (local Alpine state) are ignored.
+- `updated{Property}($value, $old)` is called for every bound value that changed, before the
+  action. Hooks may be public or protected; they are never actions.
+- `#[Bindable(as: 'q')]` gives the property a different name on the Alpine side.
+- `$this->action('$refresh')` re-renders the component without calling an action — the `.live`
+  counterpart, with htmx's own `hx-trigger` modifiers for debouncing.
+- If the root already has an `x-data="{ ... }"` object literal, the properties are merged into
+  it (server values last, so they win).
+- Use `hx-swap="outerHTML"` for bound components: the root is replaced and Alpine re-initialises
+  from the fresh `x-data`. A `morph` swap keeps the old Alpine scope alive, with stale values.
+- Bindable properties need the state snapshot: a `$stateless` component cannot have them.
 
 ### Actions
 

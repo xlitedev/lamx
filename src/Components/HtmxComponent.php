@@ -12,9 +12,11 @@ use Illuminate\Support\Str;
 use Illuminate\Support\ViewErrorBag;
 use Illuminate\View\Component;
 use Illuminate\View\ComponentSlot;
+use LogicException;
 use ReflectionClass;
 use ReflectionMethod;
 use Xlited\Lamx\Features\HandlesActions;
+use Xlited\Lamx\Features\HandlesBinding;
 use Xlited\Lamx\Features\HandlesPageComponents;
 use Xlited\Lamx\Features\HandlesState;
 use Xlited\Lamx\Features\HandlesValidation;
@@ -26,7 +28,8 @@ use Xlited\Lamx\Support\RootElement;
  *
  * Everything that belongs to a piece of UI lives in one class:
  *
- *  - state:      public properties, carried between requests in a signed snapshot
+ *  - state:      public properties, carried between requests in an encrypted snapshot
+ *  - binding:    #[Bindable] properties are shared with Alpine.js (x-data / x-model)
  *  - actions:    public methods, invoked through /lamx/{component}/{action}
  *  - validation: rules() + $this->validate(), errors re-render the component
  *  - views:      $this is available inside the component's Blade view
@@ -38,6 +41,7 @@ use Xlited\Lamx\Support\RootElement;
 abstract class HtmxComponent extends Component implements Htmlable, Responsable
 {
     use HandlesActions;
+    use HandlesBinding;
     use HandlesPageComponents;
     use HandlesState;
     use HandlesValidation;
@@ -46,6 +50,16 @@ abstract class HtmxComponent extends Component implements Htmlable, Responsable
      * The request field that carries the component snapshot.
      */
     public const STATE_KEY = '_lamx';
+
+    /**
+     * The request field that carries the values bound in the browser.
+     */
+    public const BINDING_KEY = '_lamx_data';
+
+    /**
+     * The built-in action that only re-renders the component.
+     */
+    public const REFRESH_ACTION = '$refresh';
 
     /**
      * The view rendered by the component. Guessed from the component name
@@ -60,6 +74,16 @@ abstract class HtmxComponent extends Component implements Htmlable, Responsable
     public static function make(array $data = []): static
     {
         return static::resolve($data);
+    }
+
+    /**
+     * Request fields that belong to Lamx or Laravel, never to an action.
+     *
+     * @return array<int, string>
+     */
+    public static function reservedInput(): array
+    {
+        return [static::STATE_KEY, static::BINDING_KEY, '_token', '_method'];
     }
 
     /**
@@ -156,13 +180,30 @@ abstract class HtmxComponent extends Component implements Htmlable, Responsable
     }
 
     /**
-     * Attach the state snapshot to the root element of the rendered HTML.
+     * Attach the state snapshot and the bindable properties (Alpine's
+     * x-data) to the root element of the rendered HTML.
      */
     protected function decorateHtml(string $html): string
     {
         $snapshot = $this->snapshotIfStateful();
+        $data = $this->bindableData();
 
-        return $snapshot === null ? $html : RootElement::injectVals($html, [static::STATE_KEY => $snapshot]);
+        if ($data !== [] && $snapshot === null) {
+            throw new LogicException(
+                '['.static::class.'] has bindable properties, so it cannot be stateless: '
+                .'the state snapshot is what identifies the component when the bound values come back.'
+            );
+        }
+
+        if ($snapshot !== null) {
+            $html = RootElement::injectVals($html, [static::STATE_KEY => $snapshot]);
+        }
+
+        if ($data !== []) {
+            $html = RootElement::injectData($html, $data);
+        }
+
+        return $html;
     }
 
     /**

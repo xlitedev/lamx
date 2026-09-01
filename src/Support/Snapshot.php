@@ -5,48 +5,50 @@ namespace Xlited\Lamx\Support;
 use BackedEnum;
 use DateTimeInterface;
 use DateTimeZone;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Contracts\Encryption\StringEncrypter;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use LogicException;
-use RuntimeException;
 use Xlited\Lamx\Exceptions\InvalidSnapshotException;
 use Xlited\Lamx\Exceptions\UnserializableValueException;
 
 /**
- * A snapshot is the signed, client-carried state of a component: its public
- * properties, plus the class they belong to. It travels in the "hx-vals" of
- * the component root, so every request made from inside the component
- * brings the state back and the component can be re-hydrated on the server.
+ * A snapshot is the encrypted, client-carried state of a component: its
+ * public properties, plus the class they belong to. It travels in the
+ * "hx-vals" of the component root, so every request made from inside the
+ * component brings the state back and the component can be re-hydrated on
+ * the server. Laravel's encrypter authenticates the payload, so a tampered
+ * snapshot is rejected.
  */
 class Snapshot
 {
     /**
-     * Encode and sign the given component state.
+     * Encrypt the given component state.
      */
     public static function encode(string $class, array $props): string
     {
         $payload = json_encode(['class' => $class, 'props' => $props], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
-        $data = static::base64UrlEncode($payload);
-
-        return $data.'.'.static::sign($data);
+        return static::encrypter()->encryptString($payload);
     }
 
     /**
-     * Verify and decode a snapshot into ['class' => string, 'props' => array].
+     * Decrypt a snapshot into ['class' => string, 'props' => array].
      *
      * @throws InvalidSnapshotException
      */
     public static function decode(string $snapshot): array
     {
-        [$data, $signature] = array_pad(explode('.', $snapshot, 2), 2, '');
-
-        if ($data === '' || ! hash_equals(static::sign($data), $signature)) {
-            throw new InvalidSnapshotException('The component state signature is invalid.');
+        try {
+            $json = static::encrypter()->decryptString($snapshot);
+        } catch (DecryptException) {
+            throw new InvalidSnapshotException('The component state is invalid.');
         }
 
-        $payload = json_decode(static::base64UrlDecode($data), true);
+        $payload = json_decode($json, true);
 
         if (! is_array($payload) || ! is_string($payload['class'] ?? null) || ! is_array($payload['props'] ?? null)) {
             throw new InvalidSnapshotException('The component state is malformed.');
@@ -182,33 +184,8 @@ class Snapshot
         return $class;
     }
 
-    protected static function sign(string $data): string
+    protected static function encrypter(): StringEncrypter
     {
-        return hash_hmac('sha256', $data, static::key());
-    }
-
-    protected static function key(): string
-    {
-        $key = (string) config('app.key');
-
-        if (str_starts_with($key, 'base64:')) {
-            $key = base64_decode(substr($key, 7));
-        }
-
-        if ($key === '') {
-            throw new RuntimeException('Lamx needs an application key (APP_KEY) to sign component state.');
-        }
-
-        return $key;
-    }
-
-    protected static function base64UrlEncode(string $value): string
-    {
-        return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
-    }
-
-    protected static function base64UrlDecode(string $value): string
-    {
-        return (string) base64_decode(strtr($value, '-_', '+/'), true);
+        return Container::getInstance()->make('encrypter');
     }
 }
