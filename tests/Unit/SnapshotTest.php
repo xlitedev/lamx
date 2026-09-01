@@ -57,12 +57,12 @@ class SnapshotTest extends TestCase
     public function test_tampering_is_detected(): void
     {
         $snapshot = Snapshot::encode('Foo', ['a' => 1]);
-        [$data, $signature] = explode('.', $snapshot);
 
         $this->assertSame(['class' => 'Foo', 'props' => ['a' => 1]], Snapshot::decode($snapshot));
+        $this->assertStringNotContainsString('Foo', base64_decode($snapshot), 'The snapshot is opaque.');
 
         $this->expectException(InvalidSnapshotException::class);
-        Snapshot::decode(substr($data, 0, -1).'A.'.$signature);
+        Snapshot::decode(substr_replace($snapshot, $snapshot[20] === 'A' ? 'B' : 'A', 20, 1));
     }
 
     public function test_unknown_classes_are_rejected_on_hydration(): void

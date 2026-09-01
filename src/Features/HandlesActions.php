@@ -29,6 +29,9 @@ use Xlited\Lamx\LamxFacade as Lamx;
  *
  * Method arguments are resolved from the request input by name (scalar
  * parameters) and from the container (class-typed parameters).
+ *
+ * The built-in "$refresh" action calls nothing and re-renders the component
+ * with whatever state (and bound values) the request carried.
  */
 trait HandlesActions
 {
@@ -53,9 +56,14 @@ trait HandlesActions
      */
     public static function hasAction(string $action): bool
     {
+        if ($action === HtmxComponent::REFRESH_ACTION) {
+            return true;
+        }
+
         if (str_starts_with($action, '__')
             || method_exists(HtmxComponent::class, $action)
-            || ! method_exists(static::class, $action)) {
+            || ! method_exists(static::class, $action)
+            || in_array(strtolower($action), array_map('strtolower', static::bindingHooks()), true)) {
             return false;
         }
 
@@ -74,11 +82,13 @@ trait HandlesActions
         }
 
         try {
-            $result = Container::getInstance()->call([$this, $action], $this->actionParameters($action, $request));
+            $result = $action === HtmxComponent::REFRESH_ACTION
+                ? null
+                : Container::getInstance()->call([$this, $action], $this->actionParameters($action, $request));
         } catch (ValidationException $e) {
             // Make old() work in the re-rendered form, for this request only.
             if ($request->hasSession()) {
-                $request->session()->now('_old_input', $request->except([HtmxComponent::STATE_KEY, '_token', '_method']));
+                $request->session()->now('_old_input', $request->except(HtmxComponent::reservedInput()));
             }
 
             $this->withErrors($e->validator->errors(), $e->errorBag);
@@ -95,7 +105,7 @@ trait HandlesActions
     protected function actionParameters(string $action, Request $request): array
     {
         $input = array_merge(
-            $request->except([HtmxComponent::STATE_KEY, '_token', '_method']),
+            $request->except(HtmxComponent::reservedInput()),
             array_diff_key($request->route()?->parameters() ?? [], array_flip(['component', 'action']))
         );
 

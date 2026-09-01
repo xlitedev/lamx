@@ -20,6 +20,12 @@ class ActionController
             ? $class::fromSnapshot($snapshot)
             : $class::make();
 
+        $bindings = $request->input(HtmxComponent::BINDING_KEY);
+
+        if (is_string($bindings) && $bindings !== '') {
+            $instance->applyBindings($class::decodeBindings($bindings));
+        }
+
         return $instance->dispatchAction($action, $request);
     }
 }
