@@ -2,7 +2,7 @@
 
 All notable changes to `lamx` will be documented in this file
 
-## Unreleased
+## 0.2.0 - 2026-09-01
 
 - Livewire-style components: public properties are state, carried between requests in an
   encrypted snapshot (`hx-vals:inherited` on the root element); public methods are actions
